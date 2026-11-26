@@ -1,0 +1,43 @@
+# Opens a PR that puts ONE service version on prod. Run it by hand.
+# Leave version empty to promote what staging runs now. Set an old tag to roll back.
+name: promote
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        type: choice
+        options: [svc-a, svc-b]
+      version:
+        description: 'Version to promote, e.g. v0.3.0 (empty = staging version)'
+        required: false
+permissions:
+  contents: read
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      # LAB_TOKEN: so the PR and its merge start other workflows
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.LAB_TOKEN }}
+      - name: Open the promote PR
+        env:
+          GH_TOKEN: ${{ secrets.LAB_TOKEN }}
+          SERVICE: ${{ inputs.service }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Version to promote: the input, or what staging runs now
+          staging=$(grep '^tag:' "environments/staging/$SERVICE.yaml" | cut -d'"' -f2)
+          v="${VERSION:-$staging}"
+          prod=$(grep '^tag:' "environments/prod/$SERVICE.yaml" | cut -d'"' -f2)
+          [ "$v" != "$prod" ] || { echo "::error::prod already runs $SERVICE $v"; exit 1; }
+          # Change only this service's prod file, on a new branch
+          b="promote/$SERVICE-$v"
+          git checkout -b "$b"
+          sed -i "s/^tag: .*/tag: \"$v\"/" "environments/prod/$SERVICE.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deps($SERVICE): promote $v to prod"
+          git push -u origin "$b"
+          gh pr create --title "deps($SERVICE): promote $v to prod" \
+            --body "Prod: $SERVICE $prod -> $v (staging runs $staging). Merging deploys prod after approval."

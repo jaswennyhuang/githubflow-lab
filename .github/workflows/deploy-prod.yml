@@ -1,0 +1,24 @@
+# A change in environments/prod on main deploys prod.
+name: deploy-prod
+on:
+  push:
+    branches: [main]
+    paths: ['environments/prod/**']
+permissions:
+  contents: read
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false   # never stop a deploy halfway
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod   # waits for a reviewer to approve
+    steps:
+      - uses: actions/checkout@v4
+      # Fake deploy: print each service and its version
+      - name: Deploy prod
+        run: |
+          echo "### prod now runs" >> "$GITHUB_STEP_SUMMARY"
+          for f in environments/prod/*.yaml; do
+            echo "- $(basename "$f" .yaml): $(grep '^tag:' "$f" | cut -d'"' -f2)" >> "$GITHUB_STEP_SUMMARY"
+          done

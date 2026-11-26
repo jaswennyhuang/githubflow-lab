@@ -1,0 +1,24 @@
+# A change in environments/staging on main deploys staging.
+name: deploy-staging
+on:
+  push:
+    branches: [main]
+    paths: ['environments/staging/**']
+permissions:
+  contents: read
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false   # never stop a deploy halfway
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      # Fake deploy: print each service and its version
+      - name: Deploy staging
+        run: |
+          echo "### staging now runs" >> "$GITHUB_STEP_SUMMARY"
+          for f in environments/staging/*.yaml; do
+            echo "- $(basename "$f" .yaml): $(grep '^tag:' "$f" | cut -d'"' -f2)" >> "$GITHUB_STEP_SUMMARY"
+          done
