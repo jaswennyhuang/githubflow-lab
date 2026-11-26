@@ -1,9 +1,11 @@
 # A change in environments/staging on main deploys staging.
+# Then: staging tests -> a promote PR opens by itself for each service that prod doesn't run yet.
 name: deploy-staging
 on:
   push:
     branches: [main]
     paths: ['environments/staging/**']
+  workflow_dispatch:   # also by hand, to re-run tests and promote PRs
 permissions:
   contents: read
 concurrency:
@@ -22,3 +24,23 @@ jobs:
           for f in environments/staging/*.yaml; do
             echo "- $(basename "$f" .yaml): $(grep '^tag:' "$f" | cut -d'"' -f2)" >> "$GITHUB_STEP_SUMMARY"
           done
+
+  staging-tests:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      # Fake tests: a real setup runs smoke / e2e tests against staging here
+      - run: echo "Smoke tests on staging passed" >> "$GITHUB_STEP_SUMMARY"
+
+  # One promote PR per service, only after the tests pass. A human still merges and approves.
+  promote:
+    needs: staging-tests
+    strategy:
+      matrix:
+        service: [svc-a, svc-b]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/promote.yml
+    with:
+      service: ${{ matrix.service }}
+    secrets: inherit

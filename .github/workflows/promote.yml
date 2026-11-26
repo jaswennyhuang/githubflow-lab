@@ -1,4 +1,5 @@
-# Opens a PR that puts ONE service version on prod. Run it by hand.
+# Opens a PR that puts ONE service version on prod.
+# Runs by hand, or automatically from deploy-staging after staging tests pass.
 # Leave version empty to promote what staging runs now. Set an old tag to roll back.
 name: promote
 on:
@@ -10,6 +11,15 @@ on:
       version:
         description: 'Version to promote, e.g. v0.3.0 (empty = staging version)'
         required: false
+  workflow_call:
+    inputs:
+      service:
+        type: string
+        required: true
+      version:
+        type: string
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -30,9 +40,12 @@ jobs:
           staging=$(grep '^tag:' "environments/staging/$SERVICE.yaml" | cut -d'"' -f2)
           v="${VERSION:-$staging}"
           prod=$(grep '^tag:' "environments/prod/$SERVICE.yaml" | cut -d'"' -f2)
-          [ "$v" != "$prod" ] || { echo "::error::prod already runs $SERVICE $v"; exit 1; }
+          [ "$v" != "none" ] || { echo "No version on staging yet"; exit 0; }
+          [ "$v" != "$prod" ] || { echo "Prod already runs $SERVICE $v"; exit 0; }
           # Change only this service's prod file, on a new branch
           b="promote/$SERVICE-$v"
+          # A PR for this version is already open? Then nothing to do.
+          git ls-remote --exit-code --heads origin "$b" >/dev/null && { echo "Promote PR already open: $b"; exit 0; }
           git checkout -b "$b"
           sed -i "s/^tag: .*/tag: \"$v\"/" "environments/prod/$SERVICE.yaml"
           git config user.name "github-actions[bot]"
